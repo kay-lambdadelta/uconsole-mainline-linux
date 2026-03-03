@@ -1,4 +1,4 @@
-From 87d4619cef3c6db32d474c7cc720621c320b8ef0 Mon Sep 17 00:00:00 2001
+From dedaf9f194e79bc34394bc6ac31a914e2aee6618 Mon Sep 17 00:00:00 2001
 From: kay-lambdadelta <lambdadeltakay@proton.me>
 Date: Mon, 2 Mar 2026 23:15:39 -0800
 Subject: [PATCH 5/5] drivers: power: axp20x: customize PMU
