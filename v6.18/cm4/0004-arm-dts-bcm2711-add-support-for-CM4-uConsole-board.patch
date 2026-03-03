@@ -1,0 +1,306 @@
+From e98d0851c8ad9371403925dd42d3c22ba21490a8 Mon Sep 17 00:00:00 2001
+From: kay-lambdadelta <lambdadeltakay@proton.me>
+Date: Mon, 2 Mar 2026 23:09:09 -0800
+Subject: [PATCH 4/5] arm: dts: bcm2711: add support for CM4 uConsole board
+
+Adapted from https://github.com/PotatoMania/uconsole-cm3
+---
+ arch/arm/boot/dts/broadcom/Makefile           |   2 +
+ .../dts/broadcom/bcm2711-rpi-cm4-uconsole.dts | 242 ++++++++++++++++++
+ arch/arm64/boot/dts/broadcom/Makefile         |   1 +
+ .../dts/broadcom/bcm2711-rpi-cm4-uconsole.dts |   2 +
+ 4 files changed, 247 insertions(+)
+ create mode 100644 arch/arm/boot/dts/broadcom/bcm2711-rpi-cm4-uconsole.dts
+ create mode 100644 arch/arm64/boot/dts/broadcom/bcm2711-rpi-cm4-uconsole.dts
+
+diff --git a/arch/arm/boot/dts/broadcom/Makefile b/arch/arm/boot/dts/broadcom/Makefile
+index 2552e11b5..e9b48c707 100644
+--- a/arch/arm/boot/dts/broadcom/Makefile
++++ b/arch/arm/boot/dts/broadcom/Makefile
+@@ -16,6 +16,7 @@ DTC_FLAGS_bcm2837-rpi-zero-2-w := -@
+ DTC_FLAGS_bcm2711-rpi-400 := -@
+ DTC_FLAGS_bcm2711-rpi-4-b := -@
+ DTC_FLAGS_bcm2711-rpi-cm4-io := -@
++DTC_FLAGS_bcm2711-rpi-cm4-uconsole := -@
+ DTC_FLAGS_bcm2835-rpi-zero := -@
+ DTC_FLAGS_bcm2835-rpi-zero-w := -@
+ dtb-$(CONFIG_ARCH_BCM2835) += \
+@@ -35,6 +36,7 @@ dtb-$(CONFIG_ARCH_BCM2835) += \
+ 	bcm2711-rpi-400.dtb \
+ 	bcm2711-rpi-4-b.dtb \
+ 	bcm2711-rpi-cm4-io.dtb \
++	bcm2711-rpi-cm4-uconsole.dtb \
+ 	bcm2835-rpi-zero.dtb \
+ 	bcm2835-rpi-zero-w.dtb
+ dtb-$(CONFIG_ARCH_BCMBCA) += \
+diff --git a/arch/arm/boot/dts/broadcom/bcm2711-rpi-cm4-uconsole.dts b/arch/arm/boot/dts/broadcom/bcm2711-rpi-cm4-uconsole.dts
+new file mode 100644
+index 000000000..67d8f1b2d
+--- /dev/null
++++ b/arch/arm/boot/dts/broadcom/bcm2711-rpi-cm4-uconsole.dts
+@@ -0,0 +1,242 @@
++// SPDX-License-Identifier: GPL-2.0
++/dts-v1/;
++#include <dt-bindings/leds/common.h>
++#include "bcm2711-rpi-cm4.dtsi"
++#include "bcm283x-rpi-led-deprecated.dtsi"
++#include "bcm283x-rpi-usb-host.dtsi"
++
++/ {
++	compatible = "raspberrypi,cm4-uconsole", "brcm,bcm2711";
++	model = "Raspberry Pi Compute Module 4 with uConsole";
++
++ 	chosen {
++        	bootargs = "snd_bcm2835.enable_headphones=1 console=tty1";
++         	stdout-path = "serial1:115200n8";
++        };
++
++        audio_amplifier: audio-amplifier {
++        	compatible = "simple-amplifier-switch";
++        	sw-gpios = <&gpio 10 1>; /* GPIO10, GPIO_ACTIVE_LOW */
++        	outputs-gpios = <&gpio 11 0>; /* GPIO11, GPIO_ACTIVE_HIGH */
++        	// vdd-supply = <&uc_reg_5v0>;
++        };
++
++        ocp8178_backlight: backlight@0 {
++        	compatible = "ocp8178-backlight";
++        	backlight-control-gpios = <&gpio 9 0>; /* GPIO9 ACTIVE HIGH */
++        	default-brightness = <5>;
++        	// vdd-supply = <&uc_reg_5v0>;
++        };
++
++        battery: battery@0 {
++        	compatible = "simple-battery";
++        	constant-charge-current-max-microamp = <2100000>;
++        	voltage-min-design-microvolt = <3300000>;
++        	voltage-max-design-microvolt = <4200000>;
++        };
++};
++
++&leds {
++    /delete-node/ led-act;
++};
++
++&dsi1 {
++    #address-cells = <1>;
++    #size-cells = <0>;
++    status = "okay";
++
++    port {
++        dsi_out_port: endpoint {
++            remote-endpoint = <&panel_dsi_port>;
++        };
++    };
++
++    panel_cwu50: panel@0 {
++        compatible = "clockwork,cwu50";
++        reg = <0>;
++        reset-gpio = <&gpio 8 1>; /* GPIO8 ACTIVE LOW */
++        backlight = <&ocp8178_backlight>;
++        rotation = <90>;
++        iovcc-supply = <&reg_dcdc3>;
++        vci-supply = <&reg_aldo2>;
++
++        port {
++            panel_dsi_port: endpoint {
++                remote-endpoint = <&dsi_out_port>;
++            };
++        };
++    };
++};
++
++&i2c0 {
++	status = "okay";
++
++	axp22x: pmic@34 {
++		interrupt-controller;
++		#interrupt-cells = <1>;
++		compatible = "x-powers,axp228", "x-powers,axp223", "x-powers,axp221";
++		reg = <0x34>; /* i2c address */
++		interrupt-parent = <&gpio>;
++		interrupts = <2 8>;  /* IRQ_TYPE_LEVEL_LOW */
++		irq-gpios = <&gpio 2 0>;
++
++		/* TODO: figure out the initial output states */
++		regulators {
++			x-powers,dcdc-freq = <3000>;
++
++			reg_dcdc1: dcdc1 {
++				regulator-name = "sys-3v3";
++				regulator-always-on;
++				regulator-min-microvolt = <3300000>;
++				regulator-max-microvolt = <3300000>;
++			};
++
++			reg_dcdc3: dcdc3 {
++				regulator-name = "sys-1v8";
++				regulator-always-on;
++				regulator-min-microvolt = <1800000>;
++				regulator-max-microvolt = <1800000>;
++			};
++
++			/* TODO: switch this on demand? */
++			reg_aldo1: aldo1 {
++				regulator-name = "aud-3v3";
++				regulator-always-on;
++				regulator-min-microvolt = <3300000>;
++				regulator-max-microvolt = <3300000>;
++			};
++
++			reg_aldo2: aldo2 {
++				regulator-name = "disp-3v3";
++				regulator-min-microvolt = <3300000>;
++				regulator-max-microvolt = <3300000>;
++			};
++
++			/* This pull up is required to make BT stable.
++			* This pull up must set to 3.3v when voltage jumpers are not changed,
++			* or the chip will not show up.
++			* It may originate from CM3 IO refs input voltages.
++			*/
++			reg_aldo3: aldo3 {
++				regulator-name = "vdd-wifi";
++				regulator-always-on;
++				regulator-min-microvolt = <3300000>;
++				regulator-max-microvolt = <3300000>;
++			};
++
++			reg_dldo1: dldo1 { status = "disabled"; };
++
++			/* DLDO2-DLDO4 are connected in parallel.
++			* They seem not necessary, BUT they are connected to the TPS2553's enable pin!
++			* Disable them will shutdown the USB 5V line.
++			*/
++			reg_dldo2: dldo2 {
++				regulator-name = "vcc-3v3-ext-a";
++				regulator-always-on;
++				regulator-min-microvolt = <3300000>;
++				regulator-max-microvolt = <3300000>;
++			};
++
++			reg_dldo3: dldo3 {
++				regulator-name = "vcc-3v3-ext-b";
++				regulator-always-on;
++				regulator-min-microvolt = <3300000>;
++				regulator-max-microvolt = <3300000>;
++			};
++
++			reg_dldo4: dldo4 {
++				regulator-name = "vcc-3v3-ext-c";
++				regulator-always-on;
++				regulator-min-microvolt = <3300000>;
++				regulator-max-microvolt = <3300000>;
++			};
++
++			reg_eldo1: eldo1 { status = "disabled"; };
++
++			reg_eldo2: eldo2 { status = "disabled"; };
++
++			reg_eldo3: eldo3 { status = "disabled"; };
++		};
++
++		battery_power_supply: battery-power-supply {
++			compatible = "x-powers,axp221-battery-power-supply";
++			monitored-battery = <&battery>;
++		};
++
++		ac_power_supply: ac_power_supply {
++			compatible = "x-powers,axp221-ac-power-supply";
++		};
++
++		axp_adc: adc {
++			compatible = "x-powers,axp221-adc";
++			#io-channel-cells = <1>;
++		};
++
++		axp_gpio: gpio {
++			compatible = "x-powers,axp221-gpio";
++			gpio-controller;
++			#gpio-cells = <2>;
++			status = "disabled";
++
++			gpio0_out: gpio0-out-pin {
++				pins = "GPIO0";
++				function = "gpio_out";
++			};
++		};
++
++		/* IPSOUT, feed to on-board buck to get 5V output */
++		/* TODO: figure out how to configure it properly */
++		usb_power_supply: usb-power {
++			compatible = "x-powers,axp221-usb-power-supply";
++		};
++	};
++
++};
++
++&i2c0 {
++	status = "okay";
++};
++
++&i2c0mux {
++	status = "okay";
++};
++
++&pixelvalve0 {
++	status = "okay";
++};
++
++&pixelvalve1 {
++	status = "okay";
++};
++
++&pixelvalve2 {
++	status = "okay";
++};
++
++&pixelvalve4 {
++	status = "okay";
++};
++
++&vc4 {
++	status = "okay";
++};
++
++&vec {
++	status = "disabled";
++};
++
++&hdmi0 {
++	status = "okay";
++};
++
++&hdmi1 {
++	status = "okay";
++};
++
++&ddc0 {
++	status = "okay";
++};
++
++&ddc1 {
++	status = "okay";
++};
+diff --git a/arch/arm64/boot/dts/broadcom/Makefile b/arch/arm64/boot/dts/broadcom/Makefile
+index 83d45afc6..5c4b90621 100644
+--- a/arch/arm64/boot/dts/broadcom/Makefile
++++ b/arch/arm64/boot/dts/broadcom/Makefile
+@@ -6,6 +6,7 @@ DTC_FLAGS := -@
+ dtb-$(CONFIG_ARCH_BCM2835) += bcm2711-rpi-400.dtb \
+ 			      bcm2711-rpi-4-b.dtb \
+ 			      bcm2711-rpi-cm4-io.dtb \
++			      bcm2711-rpi-cm4-uconsole.dtb \
+ 			      bcm2712-rpi-5-b.dtb \
+ 			      bcm2712-rpi-5-b-ovl-rp1.dtb \
+ 			      bcm2712-d-rpi-5-b.dtb \
+diff --git a/arch/arm64/boot/dts/broadcom/bcm2711-rpi-cm4-uconsole.dts b/arch/arm64/boot/dts/broadcom/bcm2711-rpi-cm4-uconsole.dts
+new file mode 100644
+index 000000000..f762759a1
+--- /dev/null
++++ b/arch/arm64/boot/dts/broadcom/bcm2711-rpi-cm4-uconsole.dts
+@@ -0,0 +1,2 @@
++// SPDX-License-Identifier: GPL-2.0
++#include "arm/broadcom/bcm2711-rpi-cm4-uconsole.dts"
+-- 
+2.53.0
+
